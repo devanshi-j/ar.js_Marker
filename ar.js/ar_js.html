@@ -1,22 +1,66 @@
 <!DOCTYPE html>
-<script src="https://cdn.jsdelivr.net/gh/aframevr/aframe@1.6.0/dist/aframe-master.min.js"></script>
-<!-- include aframe-ar.js -->
-<script src="../../build/aframe-ar.js"></script>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Image-based Tracking AR.js Demo</title>
+    <!-- Import A-Frame and AR.js with image tracking -->
+    <script src="https://aframe.io/releases/1.0.4/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
 
-<body style='margin : 0px; overflow: hidden; font-family: Monospace;'><div style='position: fixed; top: 10px; width:100%; text-align: center; z-index: 1;'>
-	<a href="https://github.com/AR-js-org/AR.js/" target="_blank">AR.js</a> - example for a-frame
-	<br/>
-	Contact me any time at <a href='https://twitter.com/nicolocarp' target='_blank'>@nicolocarp</a>
-</div>
-	<!-- <a-scene embedded arjs='sourceType: image; sourceUrl:../../data/images/armchair.jpg;'> -->
-	<a-scene embedded arjs='sourceType: webcam;' renderer='antialias: true; alpha: true; precision: medium;'>
+    <!-- Style for the loader -->
+    <style>
+      .arjs-loader {
+        height: 100%;
+        width: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+        background-color: rgba(0, 0, 0, 0.8);
+        z-index: 9999;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+      }
+      .arjs-loader div {
+        text-align: center;
+        font-size: 1.25em;
+        color: white;
+      }
+    </style>
+  </head>
 
-        <a-marker preset="hiro">
-            <a-sphere position="0 0.5 0" radius="0.5" color="#EF2D5E"></a-sphere>
-            <a-plane position="0 0 0" rotation="-90 0 0" width="1" height="1" color="#7BC8A4"></a-plane>
-        </a-marker>
+  <body style="margin: 0px; overflow: hidden;">
+    <!-- Minimal loader shown until image descriptors are loaded -->
+    <div class="arjs-loader">
+      <div>Loading, please wait...</div>
+    </div>
 
-		<a-entity camera></a-entity>
-	</a-scene>
-</body>
+    <!-- A-Frame scene -->
+    <a-scene
+      vr-mode-ui="enabled: false;"
+      renderer="logarithmicDepthBuffer: true;"
+      embedded
+      arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;">
+      
+      <!-- Image Tracking entity with sample T-Rex descriptors -->
+      <a-nft
+        type="nft"
+        url="https://raw.githubusercontent.com/AR-js-org/AR.js/master/aframe/examples/image-tracking/nft/trex"
+        smooth="true"
+        smoothCount="10"
+        smoothTolerance=".01"
+        smoothThreshold="5">
+        <!-- GLTF model entity for the T-Rex -->
+        <a-entity
+          gltf-model="https://arjs-cors-proxy.herokuapp.com/https://raw.githack.com/AR-js-org/AR.js/master/aframe/examples/image-tracking/nft/trex/scene.gltf"
+          scale="5 5 5"
+          position="100 100 0">
+        </a-entity>
+      </a-nft>
+
+      <!-- Static camera that moves according to the device movements -->
+      <a-entity camera></a-entity>
+    </a-scene>
+  </body>
 </html>
