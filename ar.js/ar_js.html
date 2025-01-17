@@ -24,12 +24,24 @@
         font-size: 1.25em;
         color: white;
       }
+      #debug-ui {
+        position: fixed;
+        top: 0;
+        left: 0;
+        background: rgba(0,0,0,0.6);
+        color: white;
+        padding: 10px;
+        font-family: monospace;
+        font-size: 14px;
+        z-index: 9998;
+      }
     </style>
   </head>
   <body style="margin: 0; overflow: hidden;">
     <div class="arjs-loader">
       <div>Loading, please wait...</div>
     </div>
+    <div id="debug-ui"></div>
 
     <a-scene
       vr-mode-ui="enabled: false;"
@@ -45,11 +57,12 @@
         smoothCount="10"
         smoothTolerance=".01"
         smoothThreshold="5">
+        <!-- Change the GLTF model URL to your custom model -->
         <a-entity
           gltf-model="https://arjs-cors-proxy.herokuapp.com/https://raw.githack.com/AR-js-org/AR.js/master/aframe/examples/image-tracking/nft/trex/scene.gltf"
-          scale="5 5 5"
-          position="50 150 0"
-          rotation="0 90 0">
+          scale="1 1 1"
+          position="0 0 0"
+          rotation="0 0 0">
         </a-entity>
       </a-nft>
       <a-entity camera></a-entity>
@@ -58,14 +71,42 @@
     <script>
       window.addEventListener('load', () => {
         const scene = document.querySelector('a-scene');
+        const debugUI = document.querySelector('#debug-ui');
+        const nft = document.querySelector('a-nft');
         
-        scene.addEventListener('arjs-nft-loaded', () => {
+        // Debug logging function
+        function log(message) {
+          debugUI.innerHTML += `${message}<br>`;
+          console.log(message);
+        }
+
+        scene.addEventListener('arjs-nft-loaded', (event) => {
           document.querySelector('.arjs-loader').style.display = 'none';
+          log('NFT loaded');
         });
         
-        scene.addEventListener('arjs-nft-init-failed', () => {
+        scene.addEventListener('arjs-nft-init-failed', (error) => {
+          log('NFT init failed: ' + JSON.stringify(error));
           document.querySelector('.arjs-loader').innerHTML = 
             '<div>Failed to initialize AR. Please check if all image descriptor files are available.</div>';
+        });
+
+        // Log when marker is found/lost
+        nft.addEventListener('markerFound', () => {
+          log('Marker found');
+        });
+
+        nft.addEventListener('markerLost', () => {
+          log('Marker lost');
+        });
+
+        // Log model loading status
+        const model = document.querySelector('[gltf-model]');
+        model.addEventListener('model-loaded', () => {
+          log('Model loaded');
+        });
+        model.addEventListener('model-error', (error) => {
+          log('Model error: ' + JSON.stringify(error));
         });
       });
     </script>
