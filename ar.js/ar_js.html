@@ -1,178 +1,84 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebXR Marker AR</title>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>WebXR AR.js NFT Tracking</title>
+    <script src="https://aframe.io/releases/1.4.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/webxr-polyfill@2.0.3/build/webxr-polyfill.js"></script>
     <style>
-        body { 
-            margin: 0; 
-            overflow: hidden; 
-            background: black;
-            color: white;
-            font-family: Arial, sans-serif;
-        }
-        #ar-canvas {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-        }
-        #status-overlay {
-            position: fixed;
-            top: 10px;
-            left: 10px;
-            background: rgba(0,0,0,0.5);
-            padding: 10px;
-            z-index: 1000;
-        }
+      body { margin: 0; overflow: hidden; }
+      .loader {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0,0,0,0.8);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: white;
+        z-index: 1000;
+      }
     </style>
-</head>
-<body>
-    <canvas id="ar-canvas"></canvas>
-    <div id="status-overlay">Initializing AR...</div>
+  </head>
+  <body>
+    <div class="loader">Loading AR Experience...</div>
+    
+    <a-scene
+      webxr="referenceSpaceType: local-floor;"
+      vr-mode-ui="enabled: false;"
+      renderer="logarithmicDepthBuffer: true;"
+      embedded
+      arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;"
+      loading-screen="enabled: false">
+      
+      <a-nft
+        type="nft"
+        url="https://raw.githubusercontent.com/devanshi-j/ar.js_Marker/main/ar.js/logos"
+        smooth="true"
+        smoothCount="10"
+        smoothTolerance=".01"
+        smoothThreshold="5">
+        
+        <a-entity
+          gltf-model="https://raw.githubusercontent.com/devanshi-j/ar.js_Marker/main/ar.js/mahogany_table/scene.gltf"
+          scale="0.5 0.5 0.5"
+          position="0 0 0"
+          rotation="0 0 0">
+        </a-entity>
+      </a-nft>
+      
+      <a-entity camera></a-entity>
+    </a-scene>
 
-    <script type="module">
-        import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js';
-        import { GLTFLoader } from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/loaders/GLTFLoader.js';
-
-        const statusOverlay = document.getElementById('status-overlay');
-        const canvas = document.getElementById('ar-canvas');
-
-        class WebXRMarkerTracker {
-            constructor() {
-                this.scene = null;
-                this.camera = null;
-                this.renderer = null;
-                this.session = null;
-                this.referenceSpace = null;
-                this.hitTestSource = null;
-                this.model = null;
-                this.markerUrl = 'https://raw.githubusercontent.com/devanshi-j/ar.js_Marker/main/ar.js/logos';
-                this.modelUrl = 'https://raw.githubusercontent.com/devanshi-j/ar.js_Marker/main/ar.js/mahogany_table/scene.gltf';
-            }
-
-            async init() {
-                if (!navigator.xr) {
-                    this.updateStatus('WebXR not supported');
-                    return false;
-                }
-
-                try {
-                    const isSupported = await navigator.xr.isSessionSupported('immersive-ar');
-                    if (!isSupported) {
-                        this.updateStatus('AR not supported');
-                        return false;
-                    }
-
-                    this.setupThreeScene();
-                    await this.startARSession();
-                    await this.loadModel();
-                    return true;
-                } catch (error) {
-                    this.updateStatus(`Initialization Error: ${error.message}`);
-                    return false;
-                }
-            }
-
-            setupThreeScene() {
-                this.scene = new THREE.Scene();
-                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                
-                this.renderer = new THREE.WebGLRenderer({
-                    canvas: canvas,
-                    alpha: true,
-                    antialias: true
-                });
-                this.renderer.setSize(window.innerWidth, window.innerHeight);
-                this.renderer.xr.enabled = true;
-            }
-
-            async startARSession() {
-                this.session = await navigator.xr.requestSession('immersive-ar', {
-                    requiredFeatures: ['hit-test', 'dom-overlay'],
-                    domOverlay: { root: statusOverlay }
-                });
-
-                this.referenceSpace = await this.session.requestReferenceSpace('local');
-                const glLayer = new XRWebGLLayer(this.session, this.renderer.getContext());
-                this.session.updateRenderState({ baseLayer: glLayer });
-
-                // Image tracking setup
-                try {
-                    const imageTrackingSource = await this.session.createImageTrackingSource(this.markerUrl);
-                    const imageTracker = await this.session.requestImageTracking(imageTrackingSource);
-                    this.updateStatus('Image Tracking Initialized');
-                } catch (error) {
-                    this.updateStatus(`Image Tracking Error: ${error.message}`);
-                }
-
-                this.session.addEventListener('end', this.onSessionEnd.bind(this));
-                this.session.requestAnimationFrame(this.onFrame.bind(this));
-            }
-
-            async loadModel() {
-                const loader = new GLTFLoader();
-                
-                return new Promise((resolve, reject) => {
-                    loader.load(
-                        this.modelUrl,
-                        (gltf) => {
-                            this.model = gltf.scene;
-                            this.scene.add(this.model);
-                            this.updateStatus('Model Loaded');
-                            resolve(this.model);
-                        },
-                        (progress) => {
-                            this.updateStatus(`Loading: ${(progress.loaded / progress.total * 100).toFixed(2)}%`);
-                        },
-                        (error) => {
-                            this.updateStatus(`Model Load Error: ${error.message}`);
-                            reject(error);
-                        }
-                    );
-                });
-            }
-
-            onFrame(time, frame) {
-                if (!frame) return;
-
-                const pose = frame.getViewerPose(this.referenceSpace);
-                if (pose) {
-                    const view = pose.views[0];
-                    this.renderer.render(this.scene, this.camera);
-                    
-                    // Check for tracked images
-                    const trackedImages = frame.getImageTrackingResults();
-                    trackedImages.forEach(result => {
-                        if (result.trackingState === 'tracked') {
-                            this.updateStatus(`Marker Tracked: ${result.imageIndex}`);
-                        }
-                    });
-                }
-
-                this.session.requestAnimationFrame(this.onFrame.bind(this));
-            }
-
-            onSessionEnd() {
-                this.updateStatus('AR Session Ended');
-            }
-
-            updateStatus(message) {
-                statusOverlay.textContent = message;
-                console.log(message);
-            }
+    <script>
+      // Explicit WebXR Polyfill initialization
+      document.addEventListener('DOMContentLoaded', () => {
+        if (typeof WebXRPolyfill === 'undefined') {
+          var polyfill = new WebXRPolyfill();
         }
 
-        async function startAR() {
-            const arTracker = new WebXRMarkerTracker();
-            await arTracker.init();
-        }
-
-        window.addEventListener('load', startAR);
+        const scene = document.querySelector('a-scene');
+        const loader = document.querySelector('.loader');
+        
+        scene.addEventListener('loaded', () => {
+          loader.style.display = 'none';
+          console.log('Scene fully loaded');
+        });
+        
+        scene.addEventListener('arjs-nft-loaded', () => {
+          console.log('NFT tracking initialized');
+        });
+        
+        scene.addEventListener('arjs-nft-init-failed', (error) => {
+          console.error('NFT init failed:', error);
+          loader.innerHTML = '<div>AR Initialization Failed</div>';
+        });
+      });
     </script>
-</body>
+  </body>
 </html>
 
 
