@@ -1,118 +1,133 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <title>AR.js with WebXR</title>
-    <!-- Import A-Frame and AR.js -->
-    <script src="https://aframe.io/releases/1.4.1/aframe.min.js"></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
-    <!-- Add Three.js ES Modules -->
-    <script type="module">
-      import * as THREE from "https://cdn.jsdelivr.net/npm/three@r155/build/three.module.js";
-      import { ARButton } from "https://cdn.jsdelivr.net/npm/three@r155/examples/jsm/webxr/ARButton.js";
-
-      window.addEventListener("load", () => {
-        const scene = document.querySelector("a-scene");
-        const debugUI = document.querySelector("#debug-ui");
-        const nft = document.querySelector("a-nft");
-
-        // Debug Logging
-        const log = (message) => {
-          debugUI.innerHTML += `${message}<br>`;
-          console.log(message);
-        };
-
-        // Scene Events
-        scene.addEventListener("arjs-nft-loaded", () => {
-          document.querySelector(".arjs-loader").style.display = "none";
-          log("NFT loaded successfully.");
-        });
-
-        scene.addEventListener("arjs-nft-init-failed", (error) => {
-          log("NFT initialization failed: " + JSON.stringify(error));
-          document.querySelector(".arjs-loader").innerHTML =
-            '<div>Failed to initialize AR. Please check if all image descriptor files are available.</div>';
-        });
-
-        nft.addEventListener("markerFound", () => log("Marker found"));
-        nft.addEventListener("markerLost", () => log("Marker lost"));
-
-        // WebXR Button Initialization
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.xr.enabled = true;
-        document.body.appendChild(
-          ARButton.createButton(renderer, { requiredFeatures: ["hit-test"] })
-        );
-      });
-    </script>
+<head>
+    <meta charset="utf-8">
+    <title>WebXR Marker-Based AR</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-      .arjs-loader {
-        height: 100%;
-        width: 100%;
-        position: absolute;
-        top: 0;
-        left: 0;
-        background-color: rgba(0, 0, 0, 0.8);
-        z-index: 9999;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-      }
-      .arjs-loader div {
-        text-align: center;
-        font-size: 1.25em;
-        color: white;
-      }
-      #debug-ui {
-        position: fixed;
-        top: 0;
-        left: 0;
-        background: rgba(0, 0, 0, 0.6);
-        color: white;
-        padding: 10px;
-        font-family: monospace;
-        font-size: 14px;
-        z-index: 9998;
-      }
+        body { margin: 0; }
+        #ar-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #debug-overlay {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.5);
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            z-index: 1000;
+        }
     </style>
-  </head>
-  <body style="margin: 0; overflow: hidden;">
-    <!-- Loader -->
-    <div class="arjs-loader">
-      <div>Loading, please wait...</div>
-    </div>
+</head>
+<body>
+    <canvas id="ar-canvas"></canvas>
+    <div id="debug-overlay"></div>
 
-    <!-- Debug UI -->
-    <div id="debug-ui"></div>
+    <script type="module">
+        const debugOverlay = document.getElementById('debug-overlay');
+        const canvas = document.getElementById('ar-canvas');
 
-    <!-- AR Scene -->
-    <a-scene
-      vr-mode-ui="enabled: false;"
-      renderer="logarithmicDepthBuffer: true;"
-      embedded
-      arjs="trackingMethod: best; sourceType: webcam; debugUIEnabled: false;"
-      loading-screen="enabled: false;"
-    >
-      <a-nft
-        type="nft"
-        url="https://raw.githubusercontent.com/devanshi-j/ar.js_Marker/main/ar.js/logos"
-        smooth="true"
-        smoothCount="10"
-        smoothTolerance=".01"
-        smoothThreshold="5"
-      >
-        <a-entity
-          gltf-model="https://raw.githubusercontent.com/devanshi-j/ar.js_Marker/main/ar.js/mahogany_table/scene.gltf"
-          scale="1 1 1"
-          position="0 0 0"
-          rotation="0 0 0"
-        ></a-entity>
-      </a-nft>
-      <a-entity camera></a-entity>
-    </a-scene>
-  </body>
+        // Logging function
+        function log(message) {
+            debugOverlay.innerHTML += `${message}<br>`;
+            console.log(message);
+        }
+
+        // Marker configuration
+        const markerAssetURL = 'https://raw.githubusercontent.com/devanshi-j/ar.js_Marker/main/ar.js/logos';
+        const modelURL = 'https://raw.githubusercontent.com/devanshi-j/ar.js_Marker/main/ar.js/mahogany_table/scene.gltf';
+
+        // WebXR session setup
+        async function initAR() {
+            if (!navigator.xr) {
+                log('WebXR not supported');
+                return;
+            }
+
+            try {
+                const session = await navigator.xr.requestSession('immersive-ar', {
+                    requiredFeatures: ['image-tracking']
+                });
+
+                session.addEventListener('end', onSessionEnd);
+
+                const context = canvas.getContext('webgl');
+                const glLayer = new XRWebGLLayer(session, context);
+                session.updateRenderState({ baseLayer: glLayer });
+
+                // Load and track image marker
+                const imageTrackingSource = await session.createImageTrackingSource(markerAssetURL);
+                const imageTracker = await session.requestImageTracking(imageTrackingSource);
+
+                // Load 3D model
+                const model = await loadGLTFModel(modelURL);
+
+                const frame = await session.requestAnimationFrame(onFrame);
+
+                function onFrame(time, frame) {
+                    const pose = frame.getViewerPose(referenceSpace);
+                    
+                    // Check marker tracking
+                    const trackedImages = frame.getImageTrackingResults();
+                    trackedImages.forEach(result => {
+                        if (result.trackingState === 'tracked') {
+                            log(`Marker tracked: ${result.imageIndex}`);
+                            // Render model at marker location
+                            renderModelAtMarker(result, model);
+                        }
+                    });
+
+                    session.requestAnimationFrame(onFrame);
+                }
+            } catch (error) {
+                log(`AR initialization error: ${error}`);
+            }
+        }
+
+        async function loadGLTFModel(url) {
+            try {
+                const response = await fetch(url);
+                const gltf = await response.json();
+                log('Model loaded successfully');
+                return gltf;
+            } catch (error) {
+                log(`Model loading error: ${error}`);
+                return null;
+            }
+        }
+
+        function renderModelAtMarker(markerResult, model) {
+            // Placeholder for model rendering logic
+            // Would involve transforming model based on marker pose
+        }
+
+        function onSessionEnd() {
+            log('AR session ended');
+        }
+
+        // Start AR when device is ready
+        if (navigator.xr) {
+            navigator.xr.isSessionSupported('immersive-ar')
+                .then(supported => {
+                    if (supported) {
+                        log('WebXR AR supported');
+                        const startButton = document.createElement('button');
+                        startButton.textContent = 'Start AR';
+                        startButton.onclick = initAR;
+                        document.body.appendChild(startButton);
+                    } else {
+                        log('WebXR AR not supported');
+                    }
+                });
+        }
+    </script>
+</body>
 </html>
 
 
