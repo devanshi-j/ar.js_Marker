@@ -1,11 +1,17 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <meta charset="utf-8">
-    <title>WebXR Marker-Based AR</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebXR Marker AR</title>
     <style>
-        body { margin: 0; }
+        body { 
+            margin: 0; 
+            overflow: hidden; 
+            background: black;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
         #ar-canvas {
             position: absolute;
             top: 0;
@@ -13,125 +19,161 @@
             width: 100%;
             height: 100%;
         }
-        #debug-overlay {
+        #status-overlay {
             position: fixed;
             top: 10px;
             left: 10px;
             background: rgba(0,0,0,0.5);
-            color: white;
             padding: 10px;
-            font-family: monospace;
             z-index: 1000;
         }
     </style>
 </head>
 <body>
     <canvas id="ar-canvas"></canvas>
-    <div id="debug-overlay"></div>
+    <div id="status-overlay">Initializing AR...</div>
 
     <script type="module">
-        const debugOverlay = document.getElementById('debug-overlay');
+        import * as THREE from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.module.js';
+        import { GLTFLoader } from 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/loaders/GLTFLoader.js';
+
+        const statusOverlay = document.getElementById('status-overlay');
         const canvas = document.getElementById('ar-canvas');
 
-        // Logging function
-        function log(message) {
-            debugOverlay.innerHTML += `${message}<br>`;
-            console.log(message);
-        }
-
-        // Marker configuration
-        const markerAssetURL = 'https://raw.githubusercontent.com/devanshi-j/ar.js_Marker/main/ar.js/logos';
-        const modelURL = 'https://raw.githubusercontent.com/devanshi-j/ar.js_Marker/main/ar.js/mahogany_table/scene.gltf';
-
-        // WebXR session setup
-        async function initAR() {
-            if (!navigator.xr) {
-                log('WebXR not supported');
-                return;
+        class WebXRMarkerTracker {
+            constructor() {
+                this.scene = null;
+                this.camera = null;
+                this.renderer = null;
+                this.session = null;
+                this.referenceSpace = null;
+                this.hitTestSource = null;
+                this.model = null;
+                this.markerUrl = 'https://raw.githubusercontent.com/devanshi-j/ar.js_Marker/main/ar.js/logos';
+                this.modelUrl = 'https://raw.githubusercontent.com/devanshi-j/ar.js_Marker/main/ar.js/mahogany_table/scene.gltf';
             }
 
-            try {
-                const session = await navigator.xr.requestSession('immersive-ar', {
-                    requiredFeatures: ['image-tracking']
+            async init() {
+                if (!navigator.xr) {
+                    this.updateStatus('WebXR not supported');
+                    return false;
+                }
+
+                try {
+                    const isSupported = await navigator.xr.isSessionSupported('immersive-ar');
+                    if (!isSupported) {
+                        this.updateStatus('AR not supported');
+                        return false;
+                    }
+
+                    this.setupThreeScene();
+                    await this.startARSession();
+                    await this.loadModel();
+                    return true;
+                } catch (error) {
+                    this.updateStatus(`Initialization Error: ${error.message}`);
+                    return false;
+                }
+            }
+
+            setupThreeScene() {
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                
+                this.renderer = new THREE.WebGLRenderer({
+                    canvas: canvas,
+                    alpha: true,
+                    antialias: true
+                });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.xr.enabled = true;
+            }
+
+            async startARSession() {
+                this.session = await navigator.xr.requestSession('immersive-ar', {
+                    requiredFeatures: ['hit-test', 'dom-overlay'],
+                    domOverlay: { root: statusOverlay }
                 });
 
-                session.addEventListener('end', onSessionEnd);
+                this.referenceSpace = await this.session.requestReferenceSpace('local');
+                const glLayer = new XRWebGLLayer(this.session, this.renderer.getContext());
+                this.session.updateRenderState({ baseLayer: glLayer });
 
-                const context = canvas.getContext('webgl');
-                const glLayer = new XRWebGLLayer(session, context);
-                session.updateRenderState({ baseLayer: glLayer });
+                // Image tracking setup
+                try {
+                    const imageTrackingSource = await this.session.createImageTrackingSource(this.markerUrl);
+                    const imageTracker = await this.session.requestImageTracking(imageTrackingSource);
+                    this.updateStatus('Image Tracking Initialized');
+                } catch (error) {
+                    this.updateStatus(`Image Tracking Error: ${error.message}`);
+                }
 
-                // Load and track image marker
-                const imageTrackingSource = await session.createImageTrackingSource(markerAssetURL);
-                const imageTracker = await session.requestImageTracking(imageTrackingSource);
+                this.session.addEventListener('end', this.onSessionEnd.bind(this));
+                this.session.requestAnimationFrame(this.onFrame.bind(this));
+            }
 
-                // Load 3D model
-                const model = await loadGLTFModel(modelURL);
+            async loadModel() {
+                const loader = new GLTFLoader();
+                
+                return new Promise((resolve, reject) => {
+                    loader.load(
+                        this.modelUrl,
+                        (gltf) => {
+                            this.model = gltf.scene;
+                            this.scene.add(this.model);
+                            this.updateStatus('Model Loaded');
+                            resolve(this.model);
+                        },
+                        (progress) => {
+                            this.updateStatus(`Loading: ${(progress.loaded / progress.total * 100).toFixed(2)}%`);
+                        },
+                        (error) => {
+                            this.updateStatus(`Model Load Error: ${error.message}`);
+                            reject(error);
+                        }
+                    );
+                });
+            }
 
-                const frame = await session.requestAnimationFrame(onFrame);
+            onFrame(time, frame) {
+                if (!frame) return;
 
-                function onFrame(time, frame) {
-                    const pose = frame.getViewerPose(referenceSpace);
+                const pose = frame.getViewerPose(this.referenceSpace);
+                if (pose) {
+                    const view = pose.views[0];
+                    this.renderer.render(this.scene, this.camera);
                     
-                    // Check marker tracking
+                    // Check for tracked images
                     const trackedImages = frame.getImageTrackingResults();
                     trackedImages.forEach(result => {
                         if (result.trackingState === 'tracked') {
-                            log(`Marker tracked: ${result.imageIndex}`);
-                            // Render model at marker location
-                            renderModelAtMarker(result, model);
+                            this.updateStatus(`Marker Tracked: ${result.imageIndex}`);
                         }
                     });
-
-                    session.requestAnimationFrame(onFrame);
                 }
-            } catch (error) {
-                log(`AR initialization error: ${error}`);
+
+                this.session.requestAnimationFrame(this.onFrame.bind(this));
+            }
+
+            onSessionEnd() {
+                this.updateStatus('AR Session Ended');
+            }
+
+            updateStatus(message) {
+                statusOverlay.textContent = message;
+                console.log(message);
             }
         }
 
-        async function loadGLTFModel(url) {
-            try {
-                const response = await fetch(url);
-                const gltf = await response.json();
-                log('Model loaded successfully');
-                return gltf;
-            } catch (error) {
-                log(`Model loading error: ${error}`);
-                return null;
-            }
+        async function startAR() {
+            const arTracker = new WebXRMarkerTracker();
+            await arTracker.init();
         }
 
-        function renderModelAtMarker(markerResult, model) {
-            // Placeholder for model rendering logic
-            // Would involve transforming model based on marker pose
-        }
-
-        function onSessionEnd() {
-            log('AR session ended');
-        }
-
-        // Start AR when device is ready
-        if (navigator.xr) {
-            navigator.xr.isSessionSupported('immersive-ar')
-                .then(supported => {
-                    if (supported) {
-                        log('WebXR AR supported');
-                        const startButton = document.createElement('button');
-                        startButton.textContent = 'Start AR';
-                        startButton.onclick = initAR;
-                        document.body.appendChild(startButton);
-                    } else {
-                        log('WebXR AR not supported');
-                    }
-                });
-        }
+        window.addEventListener('load', startAR);
     </script>
 </body>
 </html>
-
-
-
 
 
 <!--<!DOCTYPE html>
