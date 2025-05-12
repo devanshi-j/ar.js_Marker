@@ -1,4 +1,70 @@
 <!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>MindAR + Three.js Basic AR</title>
+
+    <!-- MindAR -->
+    <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.1.4/dist/mindar-image-three.prod.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/mind-ar@1.1.4/dist/mindar-image-three.prod.css" />
+
+    <style>
+      body, html {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        height: 100%;
+      }
+
+      #ar-container {
+        width: 100vw;
+        height: 100vh;
+        position: relative;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="ar-container"></div>
+
+    <script type="module">
+      import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.module.js';
+
+      const mindarThree = new window.MINDAR.IMAGE.MindARThree({
+        container: document.querySelector("#ar-container"),
+        imageTargetSrc: "./dummy.mind" // Required but won't be used
+      });
+
+      const { renderer, scene, camera } = mindarThree;
+
+      // Add a cube not tied to any marker
+      const cube = new THREE.Mesh(
+        new THREE.BoxGeometry(0.2, 0.2, 0.2),
+        new THREE.MeshStandardMaterial({ color: 0xff0000 })
+      );
+      cube.position.set(0, 0, -1); // In front of the camera
+      scene.add(cube);
+
+      // Lighting
+      const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
+      scene.add(light);
+
+      // Start AR
+      const start = async () => {
+        await mindarThree.start();
+        renderer.setAnimationLoop(() => {
+          renderer.render(scene, camera);
+        });
+      };
+
+      start();
+    </script>
+  </body>
+</html>
+
+
+
+<!--<!DOCTYPE html>
 <html>
   <head>
     <meta charset="utf-8" />
